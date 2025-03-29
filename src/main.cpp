@@ -224,7 +224,7 @@ int main(int argc, char * argv[]) {
 
     auto shaderProgram = createShaderProgram();
 
-    std::vector<std::vector<float>> ellipses = generateToyotaLogo(100);
+    std::vector<std::vector<float>> ellipses = generateToyotaLogo(200);
 
     std::vector<unsigned int> VBOs(ellipses.size()), VAOs(ellipses.size());
 
