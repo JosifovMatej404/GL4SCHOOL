@@ -1,4 +1,4 @@
-# OpenGLPrj
+# OpenGL Exercises, Labs and Homeworks.
 
 Project for Basics of Computer Graphics course at [FCSE](https://finki.ukim.mk/). It is a striped down version of [Polythonic/Glitter](https://github.com/Polytonic/Glitter) project that includes:
   - [GLAD](https://github.com/Dav1dde/glad) as OpenGL Function Loader
