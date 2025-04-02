@@ -9,7 +9,7 @@ It is a striped down version of [Polythonic/Glitter](https://github.com/Polytoni
 ## Setup
   Recursively clone the repository:
 
-    git clone --recursive https://github.com/joksim/OpenGLPrj.git
+    git clone --recursive https://github.com/JosifovMatej404/GL4SCHOOL.git
     
   If you are using an IDE that supports CMake builds (QtCreator, Jetbrains CLion, Visual Studio), open the cloned directory as project (the directory `OpenGLPrj` with the `CMakeLists.txt` file).
 
