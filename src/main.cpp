@@ -6,6 +6,7 @@
 #include <GLFW/glfw3.h>
 #include <cmath>
 #include <iostream>
+#include <vector>
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow* window);
@@ -26,35 +27,92 @@ const char* fragmentShaderSource = R"(
     }
 )";
 
-float hexagonRadius = 0.6f;
-float rectWidth = 0.6f;
-float rectHeight = 0.3f;
+float hexagonRadius = 0.5f;
+float rectWidth = 0.7f;
+float rectHeight = 0.52f;
 
-// Hexagon Outline (6 points)
-float hexagonVertices[] = {
-    hexagonRadius, 0.0f,        // Right
-    hexagonRadius / 2, hexagonRadius * 0.87f, // Top Right
-    -hexagonRadius / 2, hexagonRadius * 0.87f, // Top Left
-    -hexagonRadius, 0.0f,       // Left
-    -hexagonRadius / 2, -hexagonRadius * 0.87f, // Bottom Left
-    hexagonRadius / 2, -hexagonRadius * 0.87f // Bottom Right
-};
+std::vector<float> generateHexagonVertices(float radius) {
+	std::vector<float> hexagonVertices;
+	for (int i = 0; i < 6; i++) {
+		float angle = M_PI / 3 * i;
+		hexagonVertices.push_back(radius * cos(angle));
+		hexagonVertices.push_back(radius * sin(angle));
+	}
+	return hexagonVertices;
+}
 
-// Rectangle (4 points)
-float rectVertices[] = {
-    -rectWidth / 2, rectHeight / 2,  // Top Left
-    rectWidth / 2, rectHeight / 2,   // Top Right
-    rectWidth / 2, -rectHeight / 2,  // Bottom Right
-    -rectWidth / 2, -rectHeight / 2  // Bottom Left
-};
+std::vector<float> generateRectangleVertices(float width, float height) {
+	std::vector<float> rectVertices = {
+	-width / 2, height / 2,
+	width / 2, height / 2,
+	width / 2, -height / 2,
+	-width / 2, -height / 2
+	};
+	return rectVertices;
+}
 
-// Triangle Fill (4 triangles, 12 points)
-float triangles[] = {
-    hexagonVertices[2], hexagonVertices[3], rectVertices[0], rectVertices[1], hexagonVertices[0], hexagonVertices[1], // Top Right
-    hexagonVertices[4], hexagonVertices[5], rectVertices[6], rectVertices[7], hexagonVertices[6], hexagonVertices[7], // Bottom Left
-    hexagonVertices[0], hexagonVertices[1], rectVertices[2], rectVertices[3], hexagonVertices[8], hexagonVertices[9], // Bottom Right
-    hexagonVertices[2], hexagonVertices[3], rectVertices[4], rectVertices[5], hexagonVertices[10], hexagonVertices[11] // Top Left
-};
+std::vector<GLuint> generateRectangle(float width, float height) {
+	std::vector<float> rectVertices = generateRectangleVertices(width, height);
+	GLuint rectVAO, rectVBO;
+	glGenVertexArrays(1, &rectVAO);
+	glGenBuffers(1, &rectVBO);
+	glBindVertexArray(rectVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, rectVBO);
+	glBufferData(GL_ARRAY_BUFFER, rectVertices.size() * sizeof(float), rectVertices.data(), GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+	return { rectVAO, rectVBO };
+}
+
+
+std::vector<GLuint>  generateHexagonShape(float radius) {
+	std::vector<float> hexagonVertices = generateHexagonVertices(radius);
+	GLuint hexVAO, hexVBO;
+	glGenVertexArrays(1, &hexVAO);
+	glGenBuffers(1, &hexVBO);
+	glBindVertexArray(hexVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, hexVBO);
+	glBufferData(GL_ARRAY_BUFFER, hexagonVertices.size() * sizeof(float), hexagonVertices.data(), GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+	return { hexVAO, hexVBO };
+}
+
+std::vector<GLuint> generateTriangles(float radius, float width, float height) {
+	std::vector<float> hexagonVertices = generateHexagonVertices(radius);
+	std::vector<float> rectVertices = generateRectangleVertices(width, height);
+	std::vector<float> triangles = {
+		rectVertices[4], rectVertices[5], hexagonVertices[0], hexagonVertices[1], rectVertices[2], rectVertices[3], // Right
+		rectVertices[0], rectVertices[1], hexagonVertices[6], hexagonVertices[7], rectVertices[6], rectVertices[7], // Left
+		rectVertices[6], rectVertices[7], 0, hexagonVertices[9], rectVertices[4], rectVertices[5], // Bottom 
+		rectVertices[2], rectVertices[3], 0, hexagonVertices[3], rectVertices[0], rectVertices[1] // Top
+	};
+	GLuint triVAO, triVBO;
+	glGenVertexArrays(1, &triVAO);
+	glGenBuffers(1, &triVBO);
+	glBindVertexArray(triVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, triVBO);
+	glBufferData(GL_ARRAY_BUFFER, triangles.size() * sizeof(float), triangles.data(), GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+	return { triVAO, triVBO };
+}
+
+GLuint createShaderProgram() {
+	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+	glShaderSource(vertexShader, 1, &vertexShaderSource, nullptr);
+	glCompileShader(vertexShader);
+	GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+	glShaderSource(fragmentShader, 1, &fragmentShaderSource, nullptr);
+	glCompileShader(fragmentShader);
+	GLuint shaderProgram = glCreateProgram();
+	glAttachShader(shaderProgram, vertexShader);
+	glAttachShader(shaderProgram, fragmentShader);
+	glLinkProgram(shaderProgram);
+	glDeleteShader(vertexShader);
+	glDeleteShader(fragmentShader);
+	return shaderProgram;
+}
 
 int main() {
     // Initialize GLFW
@@ -77,52 +135,11 @@ int main() {
         return -1;
     }
 
-    // Build and Compile Shader
-    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, nullptr);
-    glCompileShader(vertexShader);
+	GLuint shaderProgram = createShaderProgram();
 
-    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, nullptr);
-    glCompileShader(fragmentShader);
-
-    GLuint shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-
-    // Setup Hexagon Outline VAO/VBO
-    GLuint hexVAO, hexVBO;
-    glGenVertexArrays(1, &hexVAO);
-    glGenBuffers(1, &hexVBO);
-    glBindVertexArray(hexVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, hexVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(hexagonVertices), hexagonVertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-
-    // Setup Rectangle VAO/VBO
-    GLuint rectVAO, rectVBO;
-    glGenVertexArrays(1, &rectVAO);
-    glGenBuffers(1, &rectVBO);
-    glBindVertexArray(rectVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, rectVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(rectVertices), rectVertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-
-    // Setup Triangle Fill VAO/VBO
-    GLuint triVAO, triVBO;
-    glGenVertexArrays(1, &triVAO);
-    glGenBuffers(1, &triVBO);
-    glBindVertexArray(triVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, triVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(triangles), triangles, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
+	std::vector<GLuint> hexVAOVBO = generateHexagonShape(hexagonRadius);
+	std::vector<GLuint> rectVAOVBO = generateRectangle(rectWidth, rectHeight);
+	std::vector<GLuint> triVAOVBO = generateTriangles(hexagonRadius, rectWidth, rectHeight);
 
     // Render Loop
     while (!glfwWindowShouldClose(window)) {
@@ -133,15 +150,18 @@ int main() {
         glUseProgram(shaderProgram);
 
         // Draw Triangles
-        glBindVertexArray(triVAO);
-        glDrawArrays(GL_TRIANGLES, 0, 12);
+		for (int i = 0; i < 3; i++) {
+			
+		}
+		glBindVertexArray(triVAOVBO[0]);
+		glDrawArrays(GL_TRIANGLES, 0, 12);
 
         // Draw Rectangle
-        glBindVertexArray(rectVAO);
-        glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+        glBindVertexArray(rectVAOVBO[0]);
+        glDrawArrays(GL_LINE_LOOP, 0, 4);
 
         // Draw Hexagon Outline
-        glBindVertexArray(hexVAO);
+        glBindVertexArray(hexVAOVBO[0]);
         glDrawArrays(GL_LINE_LOOP, 0, 6);
 
         glfwSwapBuffers(window);
@@ -149,12 +169,12 @@ int main() {
     }
 
     // Cleanup
-    glDeleteVertexArrays(1, &hexVAO);
-    glDeleteBuffers(1, &hexVBO);
-    glDeleteVertexArrays(1, &rectVAO);
-    glDeleteBuffers(1, &rectVBO);
-    glDeleteVertexArrays(1, &triVAO);
-    glDeleteBuffers(1, &triVBO);
+    glDeleteVertexArrays(1, &hexVAOVBO[0]);
+    glDeleteBuffers(1, &hexVAOVBO[1]);
+    glDeleteVertexArrays(1, &rectVAOVBO[0]);
+    glDeleteBuffers(1, &rectVAOVBO[1]);
+    glDeleteVertexArrays(1, &triVAOVBO[0]);
+    glDeleteBuffers(1, &triVAOVBO[1]);
     glDeleteProgram(shaderProgram);
 
     glfwTerminate();
