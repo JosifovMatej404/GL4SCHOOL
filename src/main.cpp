@@ -10,52 +10,87 @@
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow* window);
 
-const unsigned int SCR_WIDTH = 800;
+const unsigned int SCR_WIDTH = 600;
 const unsigned int SCR_HEIGHT = 600;
 
 const char* vertexShaderSource = R"glsl(
 #version 330 core
 layout (location = 0) in vec3 aPos;
-out vec2 fragPos;
 
 void main()
 {
     gl_Position = vec4(aPos, 1.0);
-    fragPos = aPos.xy;
 }
+
 )glsl";
 
 const char* fragmentShaderSource = R"glsl(
 #version 330 core
-in vec2 fragPos;
+uniform vec3 outColor;
 out vec4 FragColor;
 
 void main()
 {
-    vec2 pos = normalize(fragPos);
-    float angle = atan(pos.y, pos.x);
-    if (angle < 0.0)
-        angle += 6.28318530718;
-
-    float section = angle / 6.28318530718 * 6.0;
-    int i = int(floor(section));
-    float f = fract(section);
-
-    vec3 colors[7] = vec3[](
-        vec3(1, 0, 0),   // Red
-        vec3(1, 1, 0),   // Yellow
-        vec3(0, 1, 0),   // Green
-        vec3(0, 1, 1),   // Cyan
-        vec3(0, 0, 1),   // Blue
-        vec3(1, 0, 1),   // Magenta
-        vec3(1, 0, 0)    // Back to Red
-    );
-
-    vec3 color = mix(colors[i], colors[i + 1], f);
-    FragColor = vec4(color, 1.0);
+    FragColor = vec4(outColor, 1.0);
 }
 
 )glsl";
+
+GLuint createShaderProgram() {
+	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+	glShaderSource(vertexShader, 1, &vertexShaderSource, nullptr);
+	glCompileShader(vertexShader);
+	GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+	glShaderSource(fragmentShader, 1, &fragmentShaderSource, nullptr);
+	glCompileShader(fragmentShader);
+	GLuint shaderProgram = glCreateProgram();
+	glAttachShader(shaderProgram, vertexShader);
+	glAttachShader(shaderProgram, fragmentShader);
+	glLinkProgram(shaderProgram);
+	glDeleteShader(vertexShader);
+	glDeleteShader(fragmentShader);
+	return shaderProgram;
+}
+
+std::vector<float> generateCircle(std::vector<float> center, float size) {
+	std::vector<float> circleVertices;
+	int quality = 200; // Number of segments
+	for (int i = 0; i <= quality + 1; ++i) {
+		float angle = 2 * PI * i / quality;
+        float x, y;
+        if (i % 2 == 0) {
+            x = center[0] + (size - 0.2f) * cos(angle);
+		    y = center[1] + (size- 0.2f) * sin(angle);
+		}
+        else {
+            x = center[0] + size * cos(angle);
+            y = center[1] + size * sin(angle);
+        }
+		circleVertices.push_back(x);
+		circleVertices.push_back(y);
+		circleVertices.push_back(0.0f); // z-coordinate
+	}
+	return circleVertices;
+}
+
+std::vector<float> generateBar(std::vector<float> center, float heigth, float width) {
+	std::vector<float> barVertices;
+	float x = center[0];
+	float y = center[1];
+	barVertices.push_back(x - width / 2);
+	barVertices.push_back(y - heigth / 2);
+	barVertices.push_back(0.0f); // z-coordinate
+	barVertices.push_back(x + width / 2);
+	barVertices.push_back(y - heigth / 2);
+	barVertices.push_back(0.0f); // z-coordinate
+	barVertices.push_back(x + width / 2);
+	barVertices.push_back(y + heigth / 2);
+	barVertices.push_back(0.0f); // z-coordinate
+	barVertices.push_back(x - width / 2);
+	barVertices.push_back(y + heigth / 2);
+	barVertices.push_back(0.0f); // z-coordinate
+	return barVertices;
+}
 
 int main()
 {
@@ -80,62 +115,10 @@ int main()
         return -1;
     }
 
-    // Shader setup
-    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, nullptr);
-    glCompileShader(vertexShader);
-
-    int success;
-    char infoLog[512];
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-    if (!success)
-    {
-        glGetShaderInfoLog(vertexShader, 512, nullptr, infoLog);
-        std::cout << "Vertex Shader Compilation Failed\n" << infoLog << std::endl;
-    }
-
-    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, nullptr);
-    glCompileShader(fragmentShader);
-
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-    if (!success)
-    {
-        glGetShaderInfoLog(fragmentShader, 512, nullptr, infoLog);
-        std::cout << "Fragment Shader Compilation Failed\n" << infoLog << std::endl;
-    }
-
-    GLuint shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-    if (!success)
-    {
-        glGetProgramInfoLog(shaderProgram, 512, nullptr, infoLog);
-        std::cout << "Shader Linking Failed\n" << infoLog << std::endl;
-    }
-
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
+	GLuint shaderProgram = createShaderProgram();
 
     // Generate circle vertices
-    std::vector<float> vertices;
-    vertices.push_back(0.0f); // center point
-    vertices.push_back(0.0f);
-    vertices.push_back(0.0f);
-
-    int quality = 100;
-    for (int i = 0; i <= quality; ++i) {
-        float angle = 2 * PI * i / quality;
-        float x = 0.8f * cos(angle);
-        float y = 0.8f * sin(angle);
-        vertices.push_back(x);
-        vertices.push_back(y);
-        vertices.push_back(0.0f);
-    }
-
+	std::vector<float> vertices = generateCircle({ 0.3f, 0.0f }, 0.5f);
     // Buffer setup
     GLuint VBO, VAO;
     glGenVertexArrays(1, &VAO);
@@ -149,6 +132,26 @@ int main()
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
+    GLuint shaderProgram2 = createShaderProgram();
+
+    // Generate circle vertices
+    std::vector<float> vertices2 = generateBar({ -0.5f, 0.0f }, 0.8f, 0.2f);
+    // Buffer setup
+    GLuint VBO2, VAO2;
+    glGenVertexArrays(1, &VAO2);
+    glGenBuffers(1, &VBO2);
+
+    glBindVertexArray(VAO2);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO2);
+
+    glBufferData(GL_ARRAY_BUFFER, vertices2.size() * sizeof(float), vertices2.data(), GL_STATIC_DRAW);
+
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
     // Render loop
     while (!glfwWindowShouldClose(window))
     {
@@ -158,7 +161,18 @@ int main()
 
         glUseProgram(shaderProgram);
         glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLE_FAN, 0, quality + 2);
+
+        int vertexColorLocation = glGetUniformLocation(shaderProgram, "outColor");
+		glUniform3f(vertexColorLocation, 0.165f, 0.576f, 0.820);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, vertices.size() / 3);
+
+        glUseProgram(shaderProgram2);
+        glBindVertexArray(VAO2);
+
+        int vertexColorLocation2 = glGetUniformLocation(shaderProgram2, "outColor");
+        glUniform3f(vertexColorLocation2, 0.192f, 0.192f, 0.514f);
+		glDrawArrays(GL_TRIANGLE_FAN, 0, vertices2.size() / 3);
+
 
         glfwSwapBuffers(window);
         glfwPollEvents();
