@@ -1,50 +1,97 @@
-// Math Constants
-#define _USE_MATH_DEFINES
+#define PI 3.14159265358979323846
+#include <OpenGLPrj.hpp>
 
-// Local Headers
-#include "OpenGLPrj.hpp"
-
-// System Headers
-#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
-// Standard Headers
-#include <cstdio>
-#include <cstdlib>
 #include <iostream>
+#include <cmath>
 #include <vector>
 
-void framebuffer_size_callback(GLFWwindow* mWindow, int width, int height);
+void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow* window);
 
-const char* vertexShaderSource = R"(
-    #version 330 core
-    layout (location = 0) in vec3 aPos;
-    void main(){
-        gl_Position = vec4(aPos, 1.0f);
+const unsigned int SCR_WIDTH = 800;
+const unsigned int SCR_HEIGHT = 600;
+
+const char* vertexShaderSource = R"glsl(
+#version 330 core
+layout (location = 0) in vec3 aPos;
+out vec2 fragPos;
+
+void main()
+{
+    gl_Position = vec4(aPos, 1.0);
+    fragPos = aPos.xy;
+}
+)glsl";
+
+const char* fragmentShaderSource = R"glsl(
+#version 330 core
+in vec2 fragPos;
+out vec4 FragColor;
+
+void main()
+{
+    vec2 pos = normalize(fragPos);
+    float angle = atan(pos.y, pos.x);
+    if (angle < 0.0)
+        angle += 6.28318530718;
+
+    float section = angle / 6.28318530718 * 6.0;
+    int i = int(floor(section));
+    float f = fract(section);
+
+    vec3 colors[7] = vec3[](
+        vec3(1, 0, 0),   // Red
+        vec3(1, 1, 0),   // Yellow
+        vec3(0, 1, 0),   // Green
+        vec3(0, 1, 1),   // Cyan
+        vec3(0, 0, 1),   // Blue
+        vec3(1, 0, 1),   // Magenta
+        vec3(1, 0, 0)    // Back to Red
+    );
+
+    vec3 color = mix(colors[i], colors[i + 1], f);
+    FragColor = vec4(color, 1.0);
+}
+
+)glsl";
+
+int main()
+{
+    glfwInit();
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Color Wheel Shader", nullptr, nullptr);
+    if (window == nullptr)
+    {
+        std::cout << "Failed to create GLFW window\n";
+        glfwTerminate();
+        return -1;
     }
-)";
+    glfwMakeContextCurrent(window);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
-const char* fragmentShaderSource = R"(
-    #version 330 core
-    out vec4 FragColor;
-    void main(){
-        FragColor = vec4(0.8509803922f, 0, 0, 1.0f);
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+    {
+        std::cout << "Failed to initialize GLAD\n";
+        return -1;
     }
-)";
 
-GLuint createShaderProgram() {
-    int success;
-    char infoLog[512];
-
+    // Shader setup
     GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vertexShader, 1, &vertexShaderSource, nullptr);
     glCompileShader(vertexShader);
 
+    int success;
+    char infoLog[512];
     glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-    if (!success) {
+    if (!success)
+    {
         glGetShaderInfoLog(vertexShader, 512, nullptr, infoLog);
-        std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
+        std::cout << "Vertex Shader Compilation Failed\n" << infoLog << std::endl;
     }
 
     GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
@@ -52,9 +99,10 @@ GLuint createShaderProgram() {
     glCompileShader(fragmentShader);
 
     glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-    if (!success) {
+    if (!success)
+    {
         glGetShaderInfoLog(fragmentShader, 512, nullptr, infoLog);
-        std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
+        std::cout << "Fragment Shader Compilation Failed\n" << infoLog << std::endl;
     }
 
     GLuint shaderProgram = glCreateProgram();
@@ -62,208 +110,65 @@ GLuint createShaderProgram() {
     glAttachShader(shaderProgram, fragmentShader);
     glLinkProgram(shaderProgram);
 
-    glGetProgramiv(shaderProgram, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        glGetShaderInfoLog(shaderProgram, 512, nullptr, infoLog);
-        std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
+    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
+    if (!success)
+    {
+        glGetProgramInfoLog(shaderProgram, 512, nullptr, infoLog);
+        std::cout << "Shader Linking Failed\n" << infoLog << std::endl;
     }
 
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
 
-    return shaderProgram;
-}
-
-std::vector<float> generateOuterCircle(int quallity) {
+    // Generate circle vertices
     std::vector<float> vertices;
+    vertices.push_back(0.0f); // center point
+    vertices.push_back(0.0f);
+    vertices.push_back(0.0f);
 
-    float outerRadius = 0.9f;
-    float innerRadius = 0.75f;
-
-    float zConstant = 0.0f;
-    float angle = 0.0f;
-    float step = 2 * M_PI / quallity;
-
-    float scalingFactor = 0.7f;
-
-    for (int i = 0; i < quallity + 2; i++) {
-        float x = 0;
-        float y = 0;
-
-        if (i % 2 == 0) {
-            x = innerRadius * cos(angle);
-            y = innerRadius * sin(angle) * scalingFactor;
-        }
-        else {
-            x = outerRadius * cos(angle);
-            y = outerRadius * sin(angle) * scalingFactor;
-        }
-        
+    int quality = 100;
+    for (int i = 0; i <= quality; ++i) {
+        float angle = 2 * PI * i / quality;
+        float x = 0.8f * cos(angle);
+        float y = 0.8f * sin(angle);
         vertices.push_back(x);
         vertices.push_back(y);
-        vertices.push_back(zConstant);
-
-        angle += step;
+        vertices.push_back(0.0f);
     }
 
-    return vertices;
-}
+    // Buffer setup
+    GLuint VBO, VAO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
 
-std::vector<float> generateVerticalCircle(int quallity) {
-    std::vector<float> vertices;
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
 
-    float outerRadius = 0.525f;
-    float innerRadius = 0.375f;
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
 
-    float zConstant = 0.0f;
-    float angle = 0.0f;
-    float step = 2 * M_PI / quallity;
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
 
-    float scalingFactor = 0.3f;
-
-    for (int i = 0; i < quallity + 2; i++) {
-        float x = 0;
-        float y = 0;
-
-        if (i % 2 == 0) {
-            x = innerRadius * cos(angle) * scalingFactor;
-            y = innerRadius * sin(angle);
-        }
-        else {
-            x = outerRadius * cos(angle) * scalingFactor;
-            y = outerRadius * sin(angle);
-        }
-
-        vertices.push_back(x);
-        vertices.push_back(y);
-        vertices.push_back(zConstant);
-
-        angle += step;
-    }
-
-    return vertices;
-}
-
-std::vector<float> generateInnerCircle(int quallity) {
-    std::vector<float> vertices;
-
-    float outerRadius = 0.675f;
-    float innerRadius = 0.525f;
-
-    float zConstant = 0.0f;
-    float angle = 0.0f;
-    float step = 2 * M_PI / quallity;
-
-    float scalingFactor = 0.5f;
-
-    std::vector<float> center = { 0, 0.375f };
-
-    for (int i = 0; i < quallity + 2; i++) {
-        if (angle < M_PI) {
-            angle += step;
-            continue;
-        }
-        
-        float x = 0;
-        float y = 0;
-
-        if (i % 2 == 0) {
-            x = center[0] + innerRadius * cos(angle);
-            y = center[1] + innerRadius * sin(angle) * scalingFactor;
-        }
-        else {
-            x = center[0] + outerRadius * cos(angle);
-            y = center[1] + outerRadius * sin(angle) * scalingFactor;
-        }
-
-        vertices.push_back(x);
-        vertices.push_back(y);
-        vertices.push_back(zConstant);
-
-        angle += step;
-    }
-
-    return vertices;
-}
-
-std::vector<std::vector<float>> generateToyotaLogo(int quallity) {
-    std::vector<std::vector<float>> ellipses(3);
-    ellipses[0] = generateOuterCircle(quallity);
-    ellipses[1] = generateVerticalCircle(quallity);
-    ellipses[2] = generateInnerCircle(quallity);
-    return ellipses;
-}
-
-int main(int argc, char * argv[]) {
-
-    // Load GLFW and Create a Window
-    glfwInit();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-    auto mWindow = glfwCreateWindow(mWidth, mHeight, "OpenGL", nullptr, nullptr);
-
-    // Check for Valid Context
-    if (mWindow == nullptr) {
-        fprintf(stderr, "Failed to Create OpenGL Context");
-        return EXIT_FAILURE;
-    }
-
-    // Create Context and Load OpenGL Functions
-    glfwMakeContextCurrent(mWindow);
-    glfwSetFramebufferSizeCallback(mWindow, framebuffer_size_callback);
-    gladLoadGL();
-
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        std::cerr << "Failed to initialize GLAD" << std::endl;
-        return -1;
-    }
-    
-    fprintf(stderr, "OpenGL %s\n", glGetString(GL_VERSION));
-
-    auto shaderProgram = createShaderProgram();
-
-    std::vector<std::vector<float>> ellipses = generateToyotaLogo(200);
-
-    std::vector<unsigned int> VBOs(ellipses.size()), VAOs(ellipses.size());
-
-    glGenVertexArrays(ellipses.size(), VAOs.data());
-    glGenBuffers(ellipses.size(), VBOs.data());
-
-    for (int i = 0; i < ellipses.size(); i++) {
-        glBindVertexArray(VAOs[i]);
-        glBindBuffer(GL_ARRAY_BUFFER, VBOs[i]);
-        glBufferData(GL_ARRAY_BUFFER, ellipses[i].size() * sizeof(float), ellipses[i].data(), GL_STATIC_DRAW);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
-        glEnableVertexAttribArray(0);
-    }
-
-    // Rendering Loop
-    while (glfwWindowShouldClose(mWindow) == false) {
-        processInput(mWindow);
-
-        glClearColor(1, 1, 1, 1.0f);
+    // Render loop
+    while (!glfwWindowShouldClose(window))
+    {
+        processInput(window);
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(shaderProgram);
+        glBindVertexArray(VAO);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, quality + 2);
 
-        for (int i = 0; i < ellipses.size(); i++) {
-            glBindVertexArray(VBOs[i]);
-            glDrawArrays(GL_TRIANGLE_STRIP, 0, ellipses[i].size() / 3);
-        }
-
-        // Flip Buffers and Draw
-        glfwSwapBuffers(mWindow);
+        glfwSwapBuffers(window);
         glfwPollEvents();
-    }   
+    }
 
-    glDeleteVertexArrays(ellipses.size(), VAOs.data());
-    glDeleteBuffers(ellipses.size(), VBOs.data());
-
+    // Cleanup
+    glDeleteVertexArrays(1, &VAO);
+    glDeleteBuffers(1, &VBO);
     glfwTerminate();
-    
-    return EXIT_SUCCESS;
+    return 0;
 }
 
 void processInput(GLFWwindow* window)
@@ -272,6 +177,7 @@ void processInput(GLFWwindow* window)
         glfwSetWindowShouldClose(window, true);
 }
 
-void framebuffer_size_callback(GLFWwindow* mWindow, int width, int height) {
+void framebuffer_size_callback(GLFWwindow* window, int width, int height)
+{
     glViewport(0, 0, width, height);
 }
