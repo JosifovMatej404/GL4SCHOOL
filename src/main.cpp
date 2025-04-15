@@ -16,22 +16,30 @@ const unsigned int SCR_HEIGHT = 600;
 const char* vertexShaderSource = R"glsl(
 #version 330 core
 layout (location = 0) in vec3 aPos;
+out vec2 fragPos;
 
 void main()
 {
     gl_Position = vec4(aPos, 1.0);
+    fragPos = aPos.xy;
 }
 
 )glsl";
 
 const char* fragmentShaderSource = R"glsl(
 #version 330 core
-uniform vec3 outColor;
+
+in vec2 fragPos;
+uniform vec3 startColor;
+uniform vec3 endColor;
+
 out vec4 FragColor;
 
 void main()
 {
-    FragColor = vec4(outColor, 1.0);
+    float t = (fragPos.x + 1.0) / 2.0;
+    vec3 gradientColor = mix(startColor, endColor, t);
+    FragColor = vec4(gradientColor, 1.0);
 }
 
 )glsl";
@@ -52,44 +60,28 @@ GLuint createShaderProgram() {
 	return shaderProgram;
 }
 
-std::vector<float> generateCircle(std::vector<float> center, float size) {
-	std::vector<float> circleVertices;
-	int quality = 200; // Number of segments
-	for (int i = 0; i <= quality + 1; ++i) {
-		float angle = 2 * PI * i / quality;
-        float x, y;
-        if (i % 2 == 0) {
-            x = center[0] + (size - 0.2f) * cos(angle);
-		    y = center[1] + (size- 0.2f) * sin(angle);
-		}
-        else {
-            x = center[0] + size * cos(angle);
-            y = center[1] + size * sin(angle);
-        }
-		circleVertices.push_back(x);
-		circleVertices.push_back(y);
-		circleVertices.push_back(0.0f); // z-coordinate
-	}
-	return circleVertices;
-}
-
-std::vector<float> generateBar(std::vector<float> center, float heigth, float width) {
-	std::vector<float> barVertices;
-	float x = center[0];
-	float y = center[1];
-	barVertices.push_back(x - width / 2);
-	barVertices.push_back(y - heigth / 2);
-	barVertices.push_back(0.0f); // z-coordinate
-	barVertices.push_back(x + width / 2);
-	barVertices.push_back(y - heigth / 2);
-	barVertices.push_back(0.0f); // z-coordinate
-	barVertices.push_back(x + width / 2);
-	barVertices.push_back(y + heigth / 2);
-	barVertices.push_back(0.0f); // z-coordinate
-	barVertices.push_back(x - width / 2);
-	barVertices.push_back(y + heigth / 2);
-	barVertices.push_back(0.0f); // z-coordinate
-	return barVertices;
+std::vector<std::vector<float>> generateBars(std::vector<float> startingPosition, std::vector<float> offset,
+                                            float heigth, float width, int count) {
+    std::vector<std::vector<float>> bars;
+    for (int i = 0; i < count; i++) {
+		std::vector<float> barVertices;
+		float x = startingPosition[0] + offset[0] * i;
+		float y = startingPosition[1] + offset[1] * i;
+		barVertices.push_back(x - width / 2);
+		barVertices.push_back(y - heigth / 2);
+		barVertices.push_back(0.0f);
+		barVertices.push_back(x + width / 2);
+		barVertices.push_back(y - heigth / 2);
+		barVertices.push_back(0.0f);
+		barVertices.push_back(x + width / 2);
+		barVertices.push_back(y + heigth / 2);
+		barVertices.push_back(0.0f);
+		barVertices.push_back(x - width / 2);
+		barVertices.push_back(y + heigth / 2);
+		barVertices.push_back(0.0f);
+		bars.push_back(barVertices);
+    }
+	return bars;
 }
 
 int main()
@@ -115,42 +107,36 @@ int main()
         return -1;
     }
 
-	GLuint shaderProgram = createShaderProgram();
+    std::vector<std::vector<float>> bars = generateBars({ 0.0f, 0.6f }, { 0.0f, -0.3f }, 0.2f, 1.0f, 5);
+   
+    std::vector<GLuint> shaderPrograms;
 
-    // Generate circle vertices
-	std::vector<float> vertices = generateCircle({ 0.3f, 0.0f }, 0.5f);
+    for (int i = 0; i < bars.size(); i++) {
+        shaderPrograms.push_back(createShaderProgram());
+    }
+
     // Buffer setup
-    GLuint VBO, VAO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
+    std::vector<GLuint> VBOs(bars.size()), VAOs(bars.size());
+    glGenVertexArrays(bars.size(), VBOs.data());
+    glGenBuffers(bars.size(), VAOs.data());
 
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-
-    GLuint shaderProgram2 = createShaderProgram();
-
-    // Generate circle vertices
-    std::vector<float> vertices2 = generateBar({ -0.5f, 0.0f }, 0.8f, 0.2f);
-    // Buffer setup
-    GLuint VBO2, VAO2;
-    glGenVertexArrays(1, &VAO2);
-    glGenBuffers(1, &VBO2);
-
-    glBindVertexArray(VAO2);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO2);
-
-    glBufferData(GL_ARRAY_BUFFER, vertices2.size() * sizeof(float), vertices2.data(), GL_STATIC_DRAW);
-
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
+	for (int i = 0; i < bars.size(); i++) {
+		glBindVertexArray(VAOs[i]);
+		glBindBuffer(GL_ARRAY_BUFFER, VBOs[i]);
+		glBufferData(GL_ARRAY_BUFFER, bars[i].size() * sizeof(float), bars[i].data(), GL_STATIC_DRAW);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+		glEnableVertexAttribArray(0);
+	}
 
     //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
+	std::vector<float> colors = {
+        0.0f, 0.0f, 0.65f, 1.0f, 1.0f, 0.0f,
+        1.0f, 0.0f, 1.0f, 1.0f, 0.4f, 0.0f,
+        0.6f, 0.0f, 0.0f, 0.0f, 0.8f, 0.0f,
+		0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+		0.0f, 0.5f, 0.5f, 1.0f, 0.5f, 0.0f
+	};
 
     // Render loop
     while (!glfwWindowShouldClose(window))
@@ -159,28 +145,26 @@ int main()
         glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        glUseProgram(shaderProgram);
-        glBindVertexArray(VAO);
-
-        int vertexColorLocation = glGetUniformLocation(shaderProgram, "outColor");
-		glUniform3f(vertexColorLocation, 0.165f, 0.576f, 0.820);
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, vertices.size() / 3);
-
-        glUseProgram(shaderProgram2);
-        glBindVertexArray(VAO2);
-
-        int vertexColorLocation2 = glGetUniformLocation(shaderProgram2, "outColor");
-        glUniform3f(vertexColorLocation2, 0.192f, 0.192f, 0.514f);
-		glDrawArrays(GL_TRIANGLE_FAN, 0, vertices2.size() / 3);
-
+        for (int i = 0; i < bars.size(); i++) {
+			glUseProgram(shaderPrograms[i]);
+			glBindVertexArray(VAOs[i]);
+			int vertexColorLocation = glGetUniformLocation(shaderPrograms[i], "startColor");
+			glUniform3f(vertexColorLocation, colors[i*6], colors[i*6 + 1], colors[i*6 + 2]);
+            int vertexColorLocation2 = glGetUniformLocation(shaderPrograms[i], "endColor");
+            glUniform3f(vertexColorLocation2, colors[i*6+3], colors[i*6 + 4], colors[i*6 + 5]);
+			glDrawArrays(GL_TRIANGLE_FAN, 0, bars[i].size() / 3);
+        }
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
     // Cleanup
-    glDeleteVertexArrays(1, &VAO);
-    glDeleteBuffers(1, &VBO);
+	for (int i = 0; i < bars.size(); i++) {
+		glDeleteVertexArrays(1, &VAOs[i]);
+		glDeleteBuffers(1, &VBOs[i]);
+		glDeleteProgram(shaderPrograms[i]);
+	}
     glfwTerminate();
     return 0;
 }
