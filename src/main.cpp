@@ -1,14 +1,13 @@
-#define PI 3.14159265358979323846
+﻿#define PI 3.14159265358979323846
 #include <OpenGLPrj.hpp>
-
 #include <GLFW/glfw3.h>
-
 #include <iostream>
 #include <cmath>
 #include <vector>
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow* window);
+void checkCompileErrors(GLuint shader, std::string type);
 
 const unsigned int SCR_WIDTH = 600;
 const unsigned int SCR_HEIGHT = 600;
@@ -16,80 +15,99 @@ const unsigned int SCR_HEIGHT = 600;
 const char* vertexShaderSource = R"glsl(
 #version 330 core
 layout (location = 0) in vec3 aPos;
+out vec2 position;
 
 void main()
 {
     gl_Position = vec4(aPos, 1.0);
+    position = aPos.xy; // Pass local position
 }
-
 )glsl";
 
 const char* fragmentShaderSource = R"glsl(
 #version 330 core
-uniform vec3 outColor;
+
+uniform float time;
+in vec2 position;
 out vec4 FragColor;
+
+float highFreq = 25.0; // small waves
+float lowFreq = 5.0;   // big wave shape
+float speed = 5.0;
+
+vec3 colorA = vec3(1.0, 0.3, 0.0); // bright orange
+vec3 colorB = vec3(0.8, 0.1, 0.1); // deep orange-red
 
 void main()
 {
-    FragColor = vec4(outColor, 1.0);
-}
+    float amp = 0.5 + 0.5 * sin(position.y * lowFreq + time * speed); // [0,1]
+    float wave = sin(position.y * highFreq + time * speed);          // small wave motion
+    float combined = amp * wave;
 
+    float t = 0.5 + 0.5 * combined;
+    vec3 finalColor = mix(colorA, colorB, t);
+
+    FragColor = vec4(finalColor, 1.0);
+}
 )glsl";
 
+
+
 GLuint createShaderProgram() {
-	GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(vertexShader, 1, &vertexShaderSource, nullptr);
-	glCompileShader(vertexShader);
-	GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(fragmentShader, 1, &fragmentShaderSource, nullptr);
-	glCompileShader(fragmentShader);
-	GLuint shaderProgram = glCreateProgram();
-	glAttachShader(shaderProgram, vertexShader);
-	glAttachShader(shaderProgram, fragmentShader);
-	glLinkProgram(shaderProgram);
-	glDeleteShader(vertexShader);
-	glDeleteShader(fragmentShader);
-	return shaderProgram;
+    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vertexShaderSource, nullptr);
+    glCompileShader(vertexShader);
+    checkCompileErrors(vertexShader, "VERTEX");
+
+    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentShaderSource, nullptr);
+    glCompileShader(fragmentShader);
+    checkCompileErrors(fragmentShader, "FRAGMENT");
+
+    GLuint shaderProgram = glCreateProgram();
+    glAttachShader(shaderProgram, vertexShader);
+    glAttachShader(shaderProgram, fragmentShader);
+    glLinkProgram(shaderProgram);
+    checkCompileErrors(shaderProgram, "PROGRAM");
+
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+
+    return shaderProgram;
 }
 
-std::vector<float> generateCircle(std::vector<float> center, float size) {
-	std::vector<float> circleVertices;
-	int quality = 200; // Number of segments
-	for (int i = 0; i <= quality + 1; ++i) {
-		float angle = 2 * PI * i / quality;
-        float x, y;
-        if (i % 2 == 0) {
-            x = center[0] + (size - 0.2f) * cos(angle);
-		    y = center[1] + (size- 0.2f) * sin(angle);
-		}
-        else {
-            x = center[0] + size * cos(angle);
-            y = center[1] + size * sin(angle);
+void checkCompileErrors(GLuint shader, std::string type) {
+    GLint success;
+    GLchar infoLog[1024];
+    if (type != "PROGRAM") {
+        glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+        if (!success) {
+            glGetShaderInfoLog(shader, 1024, NULL, infoLog);
+            std::cout << type << " SHADER COMPILATION ERROR:\n" << infoLog << std::endl;
         }
-		circleVertices.push_back(x);
-		circleVertices.push_back(y);
-		circleVertices.push_back(0.0f); // z-coordinate
-	}
-	return circleVertices;
+    }
+    else {
+        glGetProgramiv(shader, GL_LINK_STATUS, &success);
+        if (!success) {
+            glGetProgramInfoLog(shader, 1024, NULL, infoLog);
+            std::cout << "PROGRAM LINKING ERROR:\n" << infoLog << std::endl;
+        }
+    }
 }
 
-std::vector<float> generateBar(std::vector<float> center, float heigth, float width) {
-	std::vector<float> barVertices;
-	float x = center[0];
-	float y = center[1];
-	barVertices.push_back(x - width / 2);
-	barVertices.push_back(y - heigth / 2);
-	barVertices.push_back(0.0f); // z-coordinate
-	barVertices.push_back(x + width / 2);
-	barVertices.push_back(y - heigth / 2);
-	barVertices.push_back(0.0f); // z-coordinate
-	barVertices.push_back(x + width / 2);
-	barVertices.push_back(y + heigth / 2);
-	barVertices.push_back(0.0f); // z-coordinate
-	barVertices.push_back(x - width / 2);
-	barVertices.push_back(y + heigth / 2);
-	barVertices.push_back(0.0f); // z-coordinate
-	return barVertices;
+std::vector<float> generateBar(std::vector<float> center, float height, float width) {
+    std::vector<float> barVertices;
+    float x = center[0];
+    float y = center[1];
+
+    barVertices = {
+        x - width / 2, y - height / 2, 0.0f,
+        x + width / 2, y - height / 2, 0.0f,
+        x + width / 2, y + height / 2, 0.0f,
+        x - width / 2, y + height / 2, 0.0f
+    };
+
+    return barVertices;
 }
 
 int main()
@@ -99,7 +117,7 @@ int main()
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Color Wheel Shader", nullptr, nullptr);
+    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Gradient Shader", nullptr, nullptr);
     if (window == nullptr)
     {
         std::cout << "Failed to create GLFW window\n";
@@ -115,11 +133,10 @@ int main()
         return -1;
     }
 
-	GLuint shaderProgram = createShaderProgram();
+    GLuint shaderProgram = createShaderProgram();
 
-    // Generate circle vertices
-	std::vector<float> vertices = generateCircle({ 0.3f, 0.0f }, 0.5f);
-    // Buffer setup
+    std::vector<float> vertices = generateBar({ 0.0f, 0.0f }, 2.0f, 2.0f);
+
     GLuint VBO, VAO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
@@ -132,27 +149,8 @@ int main()
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
-    GLuint shaderProgram2 = createShaderProgram();
+    //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); // Optional wireframe
 
-    // Generate circle vertices
-    std::vector<float> vertices2 = generateBar({ -0.5f, 0.0f }, 0.8f, 0.2f);
-    // Buffer setup
-    GLuint VBO2, VAO2;
-    glGenVertexArrays(1, &VAO2);
-    glGenBuffers(1, &VBO2);
-
-    glBindVertexArray(VAO2);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO2);
-
-    glBufferData(GL_ARRAY_BUFFER, vertices2.size() * sizeof(float), vertices2.data(), GL_STATIC_DRAW);
-
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-
-    //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
-    // Render loop
     while (!glfwWindowShouldClose(window))
     {
         processInput(window);
@@ -162,17 +160,9 @@ int main()
         glUseProgram(shaderProgram);
         glBindVertexArray(VAO);
 
-        int vertexColorLocation = glGetUniformLocation(shaderProgram, "outColor");
-		glUniform3f(vertexColorLocation, 0.165f, 0.576f, 0.820);
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, vertices.size() / 3);
-
-        glUseProgram(shaderProgram2);
-        glBindVertexArray(VAO2);
-
-        int vertexColorLocation2 = glGetUniformLocation(shaderProgram2, "outColor");
-        glUniform3f(vertexColorLocation2, 0.192f, 0.192f, 0.514f);
-		glDrawArrays(GL_TRIANGLE_FAN, 0, vertices2.size() / 3);
-
+        float time = glfwGetTime();
+        glUniform1f(glGetUniformLocation(shaderProgram, "time"), time);
+        glDrawArrays(GL_TRIANGLE_FAN, 0, vertices.size() / 3);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -181,6 +171,8 @@ int main()
     // Cleanup
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
+    glDeleteProgram(shaderProgram);
+
     glfwTerminate();
     return 0;
 }
