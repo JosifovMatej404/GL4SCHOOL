@@ -17,6 +17,11 @@ void processInput(GLFWwindow *window);
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 800;
 
+glm::vec2 position = glm::vec2(0.0f, 0.0f);
+glm::vec2 direction = glm::vec2(1.0f, 0.0f);
+float speed = 0.01f;
+
+
 int main() {
   // glfw: initialize and configure
   // ------------------------------
@@ -49,6 +54,9 @@ int main() {
     std::cout << "Failed to initialize GLAD" << std::endl;
     return -1;
   }
+  
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
   // build and compile our shader program
   // ------------------------------------
@@ -100,48 +108,25 @@ int main() {
   // load and create a texture
   // -------------------------
   unsigned int texture1, texture2;
-  // texture 1
-  // ---------
-  glGenTextures(1, &texture1);
-  glBindTexture(GL_TEXTURE_2D, texture1);
-  // set the texture wrapping parameters
-  glTexParameteri(
-      GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
-      GL_REPEAT); // set texture wrapping to GL_REPEAT (default wrapping method)
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  // set texture filtering parameters
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  // load image, create texture and generate mipmaps
+
   int width, height, nrChannels;
   stbi_set_flip_vertically_on_load(
       true); // tell stb_image.h to flip loaded texture's on the y-axis.
   // The FileSystem::getPath(...) is part of the GitHub repository so we can
   // find files on any IDE/platform; replace it with your own image path.
-  unsigned char *data = stbi_load("../res/textures/container.jpg", &width,
-                                  &height, &nrChannels, 0);
-  if (data) {
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB,
-                 GL_UNSIGNED_BYTE, data);
-    glGenerateMipmap(GL_TEXTURE_2D);
-  } else {
-    std::cout << "Failed to load texture" << std::endl;
-  }
-  stbi_image_free(data);
+  
   // texture 2
   // ---------
   glGenTextures(1, &texture2);
   glBindTexture(GL_TEXTURE_2D, texture2);
   // set the texture wrapping parameters
-  glTexParameteri(
-      GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
-      GL_REPEAT); // set texture wrapping to GL_REPEAT (default wrapping method)
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT); // set texture wrapping to GL_REPEAT (default wrapping method)
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
   // set texture filtering parameters
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   // load image, create texture and generate mipmaps
-  data = stbi_load("../res/textures/awesomeface.png", &width, &height,
+  unsigned char* data = stbi_load("../res/textures/wheel.png", &width, &height,
                    &nrChannels, 0);
   if (data) {
     // note that the awesomeface.png has transparency and thus an alpha channel,
@@ -177,16 +162,15 @@ int main() {
     glClear(GL_COLOR_BUFFER_BIT);
 
     // bind textures on corresponding texture units
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture1);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, texture2);
 
     // create transformations
     glm::mat4 transform = glm::mat4(1.0f);
-    transform = glm::translate(transform, glm::vec3(0.5f, -0.5f, 0.0f));
+    position += direction * speed;
+    transform = glm::translate(transform, glm::vec3(position, 0.0f));
     transform = glm::rotate(transform, static_cast<float>(glfwGetTime()),
-                            glm::vec3(0.0f, 0.0f, 1.0f));
+                            glm::vec3(0.0f, 0.0f, direction.x * -1.0f));
 
     // render container
     ourShader.use();
@@ -218,12 +202,22 @@ int main() {
   return 0;
 }
 
+static glm::vec2 getDirection(GLFWwindow * window) {
+    glm::vec2 dir = direction;
+	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+        dir.x = -1.0f;
+	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+        dir.x = 1.0f;;
+	return dir;
+}
+
 // process all input: query GLFW whether relevant keys are pressed/released this
 // frame and react accordingly
 // ---------------------------------------------------------------------------------------------------------
 void processInput(GLFWwindow *window) {
   if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
     glfwSetWindowShouldClose(window, true);
+  direction = getDirection(window);
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback
