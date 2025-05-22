@@ -1,170 +1,173 @@
-#include <OpenGLPrj.hpp>
+#include <glad/glad.h>
 #include <GLFW/glfw3.h>
-#include <Shader.hpp>
+
 #include <iostream>
-#include <string>
-#include <algorithm>
-#include <vector>
+#include <OpenGLPrj.hpp>
+#include <Shader.hpp>
 
-const std::string program_name = "Texture Blend";
-
-void framebuffer_size_callback(GLFWwindow* window, int width, int height);
-void processInput(GLFWwindow* window);
-
-// settings
+// Settings
 const unsigned int SCR_WIDTH = 800;
-const unsigned int SCR_HEIGHT = 800;
+const unsigned int SCR_HEIGHT = 600;
 
-glm::vec2 position = glm::vec2(0.0f, 0.0f);
-glm::vec2 direction = glm::vec2(1.0f, 0.0f);
-float speed = 0.01f;
+// Plane VAO
+unsigned int planeVAO = 0, planeVBO, planeEBO;
 
-int main() {
+void createPlane()
+{
+    float planeVertices[] = {
+        // positions          // normals         // texcoords // tangents
+        -2.0f, 0.0f, -2.0f,   0.0f, 1.0f, 0.0f,   0.0f, 0.0f,  1.0f, 0.0f, 0.0f,
+         2.0f, 0.0f, -2.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f,  1.0f, 0.0f, 0.0f,
+         2.0f, 0.0f,  2.0f,   0.0f, 1.0f, 0.0f,   1.0f, 1.0f,  1.0f, 0.0f, 0.0f,
+
+         2.0f, 0.0f,  2.0f,   0.0f, 1.0f, 0.0f,   1.0f, 1.0f,  1.0f, 0.0f, 0.0f,
+        -2.0f, 0.0f,  2.0f,   0.0f, 1.0f, 0.0f,   0.0f, 1.0f,  1.0f, 0.0f, 0.0f,
+        -2.0f, 0.0f, -2.0f,   0.0f, 1.0f, 0.0f,   0.0f, 0.0f,  1.0f, 0.0f, 0.0f,
+    };
+
+    glGenVertexArrays(1, &planeVAO);
+    glGenBuffers(1, &planeVBO);
+
+    glBindVertexArray(planeVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, planeVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(planeVertices), planeVertices, GL_STATIC_DRAW);
+
+    // Position
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    // Normal
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    // TexCoords
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+    // Tangent
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(8 * sizeof(float)));
+    glEnableVertexAttribArray(3);
+
+    glBindVertexArray(0);
+}
+
+
+
+unsigned int loadTexture(const char* path)
+{
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+
+    int width, height, nrComponents;
+    stbi_set_flip_vertically_on_load(true);
+    unsigned char* data = stbi_load(path, &width, &height, &nrComponents, 0);
+
+    if (data)
+    {
+        GLenum format = GL_RGB;
+        if (nrComponents == 1) format = GL_RED;
+        else if (nrComponents == 4) format = GL_RGBA;
+
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    }
+    else
+    {
+        std::cout << "Failed to load texture: " << path << std::endl;
+    }
+    stbi_image_free(data);
+    return textureID;
+}
+
+int main()
+{
+    // GLFW init
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-#ifdef __APPLE__
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#endif
-
-    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, program_name.c_str(), nullptr, nullptr);
-    if (window == nullptr) {
-        std::cout << "Failed to create GLFW window" << std::endl;
-        glfwTerminate();
-        return -1;
-    }
+    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "PBR Plane", NULL, NULL);
+    if (!window) return -1;
     glfwMakeContextCurrent(window);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
 
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        std::cout << "Failed to initialize GLAD" << std::endl;
-        return -1;
-    }
+    glEnable(GL_DEPTH_TEST);
 
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    Shader pbrShader("../res/shaders/shader.vert", "../res/shaders/shader.frag");
 
-    std::string shader_location = "../res/shaders/";
-    Shader ourShader(shader_location + "shader.vert", shader_location + "shader.frag");
 
-    float vertices[] = {
- 0.5f,  0.5f, 0.0f, 10.0f, 10.0f,
- 0.5f, -0.5f, 0.0f, 10.0f,  0.0f,
--0.5f, -0.5f, 0.0f,  0.0f,  0.0f,
--0.5f,  0.5f, 0.0f,  0.0f, 10.0f,
 
-    };
-    unsigned int indices[] = {
-        0, 1, 3,
-        1, 2, 3
-    };
+    createPlane();
+        
+    // Load PBR Textures
+    unsigned int albedoMap = loadTexture("../res/textures/base.png");
+    unsigned int normalMap = loadTexture("../res/textures/normal.png");
+    unsigned int metallicMap = loadTexture("../res/textures/metallic.png");
+    unsigned int roughnessMap = loadTexture("../res/textures/roughness.png");
+    unsigned int aoMap = loadTexture("../res/textures/ambient.png");
+    unsigned int heightMap = loadTexture("../res/textures/height.png");
 
-    unsigned int VBO, VAO, EBO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-    glGenBuffers(1, &EBO);
+    // Bind texture units
+    pbrShader.use();
+    pbrShader.setInt("albedoMap", 0);
+    pbrShader.setInt("normalMap", 1);
+    pbrShader.setInt("metallicMap", 2);
+    pbrShader.setInt("roughnessMap", 3);
+    pbrShader.setInt("aoMap", 4);
+    pbrShader.setInt("heightMap", 5);
 
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    glm::vec3 lightColor(1.0f, 1.0f, 1.0f);
 
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+    while (!glfwWindowShouldClose(window))
+    {
+        float time = glfwGetTime();
+        float deltaTime = 0.016f;
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
+        glm::vec3 lightPos = glm::vec3(sin(time) * 3.0f, 1.5f + sin(time * 0.5f) * 0.5f, cos(time) * 3.0f);
 
-    unsigned int texture1, texture2;
-    int width, height, nrChannels;
-    stbi_set_flip_vertically_on_load(true);
+        glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)SCR_WIDTH / SCR_HEIGHT, 0.1f, 100.0f);
+        glm::mat4 view = glm::lookAt(glm::vec3(0.0, 1.0, 5.0), glm::vec3(0.0), glm::vec3(0.0, 1.0, 0.0));
+        glm::mat4 model = glm::mat4(1.0f);
 
-    // texture1: wheel_base.jpg
-    glGenTextures(1, &texture1);
-    glBindTexture(GL_TEXTURE_2D, texture1);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    unsigned char* data = stbi_load("../res/textures/tex1.jpg", &width, &height, &nrChannels, 0);
-    if (data) {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-    }
-    else {
-        std::cout << "Failed to load texture1" << std::endl;
-    }
-    stbi_image_free(data);
+        // render
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // texture2: wheel.png
-    glGenTextures(1, &texture2);
-    glBindTexture(GL_TEXTURE_2D, texture2);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    data = stbi_load("../res/textures/tex1.png", &width, &height, &nrChannels, 0);
-    if (data) {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-    }
-    else {
-        std::cout << "Failed to load texture2" << std::endl;
-    }
-    stbi_image_free(data);
+        pbrShader.use();
 
-    ourShader.use();
-    glUniform1i(glGetUniformLocation(ourShader.ID, "texture1"), 0);
-    ourShader.setInt("texture2", 1);
 
-    float startTime = glfwGetTime();
-
-    while (!glfwWindowShouldClose(window)) {
-        processInput(window);
-
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        float timeElapsed = glfwGetTime() - startTime;
-        float blendFactor = (sin(timeElapsed) + 1.0f) / 2.0f;
+        pbrShader.setMat4("projection", projection);
+        pbrShader.setMat4("view", view);
+        pbrShader.setMat4("model", model);
+        pbrShader.setVec3("camPos", glm::vec3(0.0, 1.0, 5.0));
+        pbrShader.setVec3("lightPos", lightPos);
+        pbrShader.setVec3("lightColor", lightColor);
 
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture1);
+        glBindTexture(GL_TEXTURE_2D, albedoMap);
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, texture2);
+        glBindTexture(GL_TEXTURE_2D, normalMap);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, metallicMap);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, roughnessMap);
 
-        glm::mat4 transform = glm::mat4(1.0f);
-        transform = glm::scale(transform, glm::vec3(glm::clamp(blendFactor + 3.0f, 3.0f, 4.0f), glm::clamp(blendFactor + 4.0f, 4.0f, 5.0f), 1.0f)); // scale up
-        transform = glm::rotate(transform, (float)glfwGetTime(), glm::vec3(0.0f, 0.0f, -direction.x));
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, aoMap);
 
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_2D, heightMap);
 
-        ourShader.use();
-        glUniformMatrix4fv(glGetUniformLocation(ourShader.ID, "transform"), 1, GL_FALSE, glm::value_ptr(transform));
-        glUniform1f(glGetUniformLocation(ourShader.ID, "blendFactor"), blendFactor);
-
-        glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        glBindVertexArray(planeVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
-    glDeleteVertexArrays(1, &VAO);
-    glDeleteBuffers(1, &VBO);
-    glDeleteBuffers(1, &EBO);
-
     glfwTerminate();
     return 0;
-}
-
-void processInput(GLFWwindow* window) {
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, true);
-}
-
-void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
-    glViewport(0, 0, width, height);
 }
